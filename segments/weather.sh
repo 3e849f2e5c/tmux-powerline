@@ -45,6 +45,7 @@ run_segment() {
 	local weather
 	case "$TMUX_POWERLINE_SEG_WEATHER_DATA_PROVIDER" in
 		"yahoo") weather=$(__yahoo_weather) ;;
+		"wettr") weather=$(__wettr_weather) ;;
 		*)
 			echo "Unknown weather provider [${$TMUX_POWERLINE_SEG_WEATHER_DATA_PROVIDER}]";
 			return 1
@@ -127,6 +128,30 @@ __yahoo_weather() {
 		fi
 		condition_symbol=$(__get_condition_symbol "$condition" "$sunrise" "$sunset") 
 		echo "${condition_symbol} ${degree}°$(echo "$TMUX_POWERLINE_SEG_WEATHER_UNIT" | tr '[:lower:]' '[:upper:]')" | tee "${tmp_file}"
+	fi
+}
+
+__wettr_weather() {
+	if [ -f "$tmp_file" ]; then
+		last_update=$(stat -c "%Y" ${tmp_file})
+		time_now=$(date +%s)
+
+		up_to_date=$(echo "(${time_now}-${last_update}) < ${update_period}" | bc)
+		if [ "$up_to_date" -eq 1 ]; then
+			__read_tmp_file
+		fi
+	fi
+
+	weather_data=$(curl wttr.in/${TMUX_POWERLINE_SEG_WEATHER_LOCATION}?format=%c+%t)
+	if [ "$?" -eq "0" ]; then
+		error=$(echo "$weather_data" | grep "problem_cause\|DOCTYPE");
+		if [ -n "$error" ]; then
+			echo "error"
+			exit 1
+		fi
+		echo "${weather_data}" | tee "${tmp_file}"
+	elif [ -f "${tmp_file}" ]; then
+		__read_tmp_file
 	fi
 }
 
